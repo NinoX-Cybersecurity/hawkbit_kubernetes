@@ -1,0 +1,14 @@
+kind: ImageStream
+apiVersion: v1
+metadata:
+ name: rabbit
+ labels:
+   app: hawkbit
+spec:
+ tags:
+ - from:
+     kind: DockerImage
+     name: docker.io/bitnami/rabbitmq:3.7.18-debian-9-r1
+   name: "latest"
+   importPolicy:
+     scheduled: true

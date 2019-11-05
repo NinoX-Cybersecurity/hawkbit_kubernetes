@@ -1,0 +1,15 @@
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: hawkbit
+  labels:
+    app: hawkbit
+spec:
+  to:
+    kind: Service
+    name: hawkbit
+  port:
+    targetPort: http
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect

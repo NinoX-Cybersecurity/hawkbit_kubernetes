@@ -1,0 +1,197 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: rabbit
+  labels:
+    app: hawkbit
+    name: rabbit
+  annotations:
+    image.openshift.io/triggers: |-
+      [
+        {
+          "from": {
+            "kind": "ImageStreamTag",
+            "name": "rabbit:latest"
+          },
+          "fieldPath": "spec.template.spec.containers[?(@.name==\"rabbit\")].image"
+        }
+      ]
+spec:
+  serviceName: rabbit
+  podManagementPolicy: OrderedReady
+  replicas: 1
+  updateStrategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app: hawkbit
+      name: rabbit
+  template:
+    metadata:
+      labels:
+        app: hawkbit
+        name: rabbit
+    spec:
+      serviceAccountName: hawkbit-rabbit
+      terminationGracePeriodSeconds: 10
+      containers:
+      - name: rabbit
+        image: rabbit
+        imagePullPolicy: IfNotPresent
+        command:
+         - bash
+         - -ec
+         - |
+            mkdir -p /opt/bitnami/rabbitmq/.rabbitmq/
+            mkdir -p /opt/bitnami/rabbitmq/etc/rabbitmq/
+            touch /opt/bitnami/rabbitmq/var/lib/rabbitmq/.start
+            #persist the erlang cookie in both places for server and cli tools
+            echo $RABBITMQ_ERL_COOKIE > /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie
+            cp /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie /opt/bitnami/rabbitmq/.rabbitmq/
+            #change permission so only the user has access to the cookie file
+            chmod 600 /opt/bitnami/rabbitmq/.rabbitmq/.erlang.cookie /opt/bitnami/rabbitmq/var/lib/rabbitmq/.erlang.cookie
+            #copy the mounted configuration to both places
+            cp  /opt/bitnami/rabbitmq/conf/* /opt/bitnami/rabbitmq/etc/rabbitmq
+            # Apply resources limits
+            ulimit -n "${RABBITMQ_ULIMIT_NOFILES}"
+            #replace the default username
+            sed -i "/CHANGEUSER/cdefault_user=${RABBITMQ_USERNAME//\\/\\\\}" /opt/bitnami/rabbitmq/etc/rabbitmq/rabbitmq.conf
+            #replace the default password
+            sed -i "/CHANGEPASS/cdefault_pass=${RABBITMQ_PASSWORD//\\/\\\\}" /opt/bitnami/rabbitmq/etc/rabbitmq/rabbitmq.conf
+            #api check for probes
+            cat > /opt/bitnami/rabbitmq/sbin/rabbitmq-api-check <<EOF
+            #!/bin/sh
+            set -e
+            URL=\$1
+            EXPECTED=\$2
+            ACTUAL=\$(curl --silent --show-error --fail "\${URL}")
+            echo "\${ACTUAL}"
+            test "\${EXPECTED}" = "\${ACTUAL}"
+            EOF
+            chmod a+x /opt/bitnami/rabbitmq/sbin/rabbitmq-api-check
+            #health check for probes, handle period during rabbit sync
+            cat > /opt/bitnami/rabbitmq/sbin/rabbitmq-health-check <<EOF
+            #!/bin/sh
+            START_FLAG=/opt/bitnami/rabbitmq/var/lib/rabbitmq/.start
+            if [ -f \${START_FLAG} ]; then
+               rabbitmqctl node_health_check
+               RESULT=\$?
+               if [ \$RESULT -ne 0 ]; then
+                  rabbitmqctl status
+                  exit $?
+               fi
+               rm -f \${START_FLAG}
+               exit \${RESULT}
+            fi
+            rabbitmq-api-check \$1 \$2
+            EOF
+            chmod a+x /opt/bitnami/rabbitmq/sbin/rabbitmq-health-check
+            exec rabbitmq-server
+        volumeMounts:
+          - name: config
+            mountPath: /opt/bitnami/rabbitmq/conf
+          - name: data
+            mountPath: /opt/bitnami/rabbitmq/var/lib/rabbitmq
+        ports:
+        - name: epmd
+          containerPort: 4369
+        - name: amqp
+          containerPort: 5672
+        - name: dist
+          containerPort: 25672
+        - name: stats
+          containerPort: 15672
+        livenessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - rabbitmq-api-check "http://${RABBITMQ_USERNAME}:${RABBITMQ_PASSWORD}@127.0.0.1:15672/api/healthchecks/node" '{"status":"ok"}'
+          initialDelaySeconds: 30
+          timeoutSeconds: 20
+          periodSeconds: 30
+          failureThreshold: 6
+          successThreshold: 1
+        readinessProbe:
+          exec:
+            command:
+              - sh
+              - -c
+              - rabbitmq-health-check "http://${RABBITMQ_USERNAME}:${RABBITMQ_PASSWORD}@127.0.0.1:15672/api/healthchecks/node" '{"status":"ok"}'
+          initialDelaySeconds: 10
+          timeoutSeconds: 20
+          periodSeconds: 30
+          failureThreshold: 3
+          successThreshold: 1
+        resources:
+          limits:
+            memory: 1Gi
+            cpu: 1
+        env:
+          - name: BITNAMI_DEBUG
+            value: "false"
+          - name: MY_POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: MY_POD_NAME
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: MY_POD_NAMESPACE
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.namespace
+          - name: RABBITMQ_USERNAME
+            valueFrom:
+              configMapKeyRef:
+                name: hawkbit-rabbit
+                key: rabbit.username
+          - name: RABBITMQ_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: hawkbit-rabbit
+                key: rabbit.password
+          - name: K8S_SERVICE_NAME
+            value: "rabbit"
+          - name: K8S_ADDRESS_TYPE
+            value: hostname
+          - name: RABBITMQ_NODENAME
+            value: "rabbit@$(MY_POD_NAME).$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+          - name: K8S_HOSTNAME_SUFFIX
+            value: ".$(K8S_SERVICE_NAME).$(MY_POD_NAMESPACE).svc.cluster.local"
+          - name: RABBITMQ_LOGS
+            value: "-"
+          - name: RABBITMQ_ULIMIT_NOFILES
+            value: "65536"
+          - name: RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS
+            value: +S 2:1
+          - name: RABBITMQ_USE_LONGNAME
+            value: "true"
+          - name: RABBITMQ_ERL_COOKIE
+            valueFrom:
+              secretKeyRef:
+                name: hawkbit-rabbit
+                key: rabbit.erlang.cookie
+      securityContext: {}
+      volumes:
+        - name: config
+          configMap:
+            name: hawkbit-rabbit
+            items:
+            - key: rabbitmq.conf
+              path: rabbitmq.conf
+            - key: enabled_plugins
+              path: enabled_plugins
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+        labels:
+          app: hawkbit
+          name: hawkbit-rabbit
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+            requests:
+              storage: "8Gi"

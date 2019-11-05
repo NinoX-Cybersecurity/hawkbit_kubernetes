@@ -1,0 +1,13 @@
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: hawkbit-rabbit-endpoint-reader
+  labels:
+    app: hawkbit
+subjects:
+- kind: ServiceAccount
+  name: hawkbit-rabbit
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: hawkbit-rabbit-endpoint-reader

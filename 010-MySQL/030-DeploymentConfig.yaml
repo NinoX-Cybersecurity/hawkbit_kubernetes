@@ -1,0 +1,68 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  name: mysql
+  labels:
+    app: hawkbit
+    name: mysql
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template: 
+    metadata:
+      labels:
+        app: hawkbit
+        name: mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql
+          ports:
+            - containerPort: 3306
+              protocol: TCP
+              name: mysql
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/mysql/data
+          env:
+            - name: MYSQL_USER
+              valueFrom:
+                configMapKeyRef:
+                  name: mysql
+                  key: user.username
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql
+                  key: user.password
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql
+                  key: admin.password
+            - name: MYSQL_DATABASE
+              valueFrom:
+                configMapKeyRef:
+                  name: mysql
+                  key: database
+          livenessProbe:
+            timeoutSeconds: 1
+            initialDelaySeconds: 30
+            tcpSocket:
+              port: 3306
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: mysql
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+          - mysql
+        from:
+          kind: ImageStreamTag
+          namespace: openshift
+          name: mysql:5.7

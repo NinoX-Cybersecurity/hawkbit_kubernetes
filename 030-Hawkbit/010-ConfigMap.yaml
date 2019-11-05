@@ -1,0 +1,34 @@
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: hawkbit
+  labels:
+    name: 
+data:
+  application.yaml: |-
+    hawkbit:
+      dmf:
+        hono:
+          authentication-method: oidc
+          credentials-list-uri: http://[DEVICE_REGISTRY_HOST]:8080/v1/credentials/$$tenantId/$$deviceId
+          device-list-uri: http://[DEVICE_REGISTRY_HOST]:8080/admin/$$tenantId/devices
+          enabled: false
+          oidc-client-id: '[KEYCLOAK_DEVICE_REGISTRY_CLIENT_ID]'
+          oidc-token-uri: http://[KEYCLOAK_HOST]:8080/auth/realms/kiwigrid/protocol/openid-connect/token
+          tenant-list-uri: http://[DEVICE_REGISTRY_HOST]:8080/admin/tenants
+          username: '[KEYCLOAK_HAWKBIT_USERNAME]'
+    spring:
+      cloud:
+        stream:
+          bindings:
+            default:
+              group: hawkbit
+            device-created:
+              destination: device-registry.device-created
+            device-deleted:
+              destination: device-registry.device-deleted
+            device-updated:
+              destination: device-registry.device-updated
+      security:
+        user:
+          name: admin

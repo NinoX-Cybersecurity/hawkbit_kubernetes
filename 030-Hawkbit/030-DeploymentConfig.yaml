@@ -1,0 +1,96 @@
+kind: DeploymentConfig
+apiVersion: apps.openshift.io/v1
+metadata:
+  name: hawkbit
+  labels:
+    app: hawkbit
+    name: hawkbit
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      labels:
+        app: hawkbit
+        name: hawkbit
+    spec:
+      containers:
+        - name: hawkbit
+          image: hawkbit
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: mysql
+            - name: org.eclipse.hawkbit.repository.file.path
+              value: /var/lib/hawkbit-storage
+            - name: MANAGEMENT_SERVER_PORT
+              value: "9090"
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mysql://mysql:3306/hawkbit"
+            - name: spring.datasource.username
+              valueFrom:
+                configMapKeyRef:
+                  name: mysql
+                  key: user.username
+            - name: spring.datasource.password
+              valueFrom:
+                secretKeyRef:
+                  name: mysql
+                  key: user.password
+            - name: SPRING_APPLICATION_JSON
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit
+                  key: SPRING_APPLICATION_JSON
+            - name: SPRING_RABBITMQ_HOST
+              value: rabbit
+            - name: SPRING_RABBITMQ_USERNAME
+              valueFrom:
+                configMapKeyRef:
+                  name: hawkbit-rabbit
+                  key: rabbit.username
+            - name: SPRING_RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: hawkbit-rabbit
+                  key: rabbit.password
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 9090
+          livenessProbe:
+            httpGet:
+              path: /VAADIN/themes/hawkbit/favicon.ico
+              port: http
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /VAADIN/themes/hawkbit/favicon.ico
+              port: http  
+            initialDelaySeconds: 60
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /opt/hawkbit/config
+            - name: storage
+              mountPath: /var/lib/hawkbit-storage
+      volumes:
+      - name: config
+        configMap:
+          name: hawkbit
+      - name: storage
+        persistentVolumeClaim:
+          claimName: hawkbit-storage
+  triggers:
+    - type: ConfigChange
+    - type: ImageChange
+      imageChangeParams:
+        automatic: true
+        containerNames:
+          - hawkbit
+        from:
+          kind: ImageStreamTag
+          name: hawkbit:latest

@@ -1,0 +1,14 @@
+kind: ImageStream
+apiVersion: v1
+metadata:
+ name: hawkbit
+ labels:
+   app: hawkbit
+spec:
+ tags:
+ - from:
+     kind: DockerImage
+     name: hawkbit/hawkbit-update-server:0.3.0M5-mysql
+   name: "latest"
+   importPolicy:
+     scheduled: true
