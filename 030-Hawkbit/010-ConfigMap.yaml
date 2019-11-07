@@ -3,7 +3,7 @@ apiVersion: v1
 metadata:
   name: hawkbit
   labels:
-    name: 
+    app: hawkbit
 data:
   application.yaml: |-
     hawkbit:
