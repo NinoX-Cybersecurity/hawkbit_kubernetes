@@ -36,7 +36,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
       - name: rabbit
-        image: rabbit
+        image: docker.io/bitnami/rabbitmq:3.7.18-debian-9-r1
         imagePullPolicy: IfNotPresent
         command:
          - bash

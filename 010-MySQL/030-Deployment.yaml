@@ -1,14 +1,28 @@
-kind: DeploymentConfig
-apiVersion: apps.openshift.io/v1
+kind: Deployment
+apiVersion: apps/v1
 metadata:
   name: mysql
   labels:
     app: hawkbit
     name: mysql
+  annotations:
+    image.openshift.io/triggers: |-
+      [
+        {
+          "from": {
+            "kind": "ImageStreamTag",
+            "namespace": "openshift",
+            "name": "mysql:5.7"
+          },
+          "fieldPath": "spec.template.spec.containers[?(@.name==\"mysql\")].image"
+        }
+      ]
 spec:
   replicas: 1
-  strategy:
-    type: Recreate
+  selector:
+    matchLabels:
+      app: hawkbit
+      name: mysql
   template: 
     metadata:
       labels:
@@ -17,7 +31,7 @@ spec:
     spec:
       containers:
         - name: mysql
-          image: mysql
+          image: docker.io/centos/mysql-57-centos7:latest
           ports:
             - containerPort: 3306
               protocol: TCP
@@ -55,14 +69,3 @@ spec:
         - name: data
           persistentVolumeClaim:
             claimName: mysql
-  triggers:
-    - type: ConfigChange
-    - type: ImageChange
-      imageChangeParams:
-        automatic: true
-        containerNames:
-          - mysql
-        from:
-          kind: ImageStreamTag
-          namespace: openshift
-          name: mysql:5.7

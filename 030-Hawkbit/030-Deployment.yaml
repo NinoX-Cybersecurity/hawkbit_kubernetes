@@ -1,14 +1,27 @@
-kind: DeploymentConfig
-apiVersion: apps.openshift.io/v1
+kind: Deployment
+apiVersion: apps/v1
 metadata:
   name: hawkbit
   labels:
     app: hawkbit
     name: hawkbit
+  annotations:
+    image.openshift.io/triggers: |-
+      [
+        {
+          "from": {
+            "kind": "ImageStreamTag",
+            "name": "hawkbit:latest"
+          },
+          "fieldPath": "spec.template.spec.containers[?(@.name==\"hawkbit\")].image"
+        }
+      ]
 spec:
   replicas: 1
-  strategy:
-    type: Recreate
+  selector:
+    matchLabels:
+      app: hawkbit
+      name: hawkbit
   template:
     metadata:
       labels:
@@ -17,7 +30,7 @@ spec:
     spec:
       containers:
         - name: hawkbit
-          image: hawkbit
+          image: hawkbit/hawkbit-update-server:0.3.0M5-mysql
           imagePullPolicy: IfNotPresent
           env:
             - name: SPRING_PROFILES_ACTIVE
@@ -84,13 +97,3 @@ spec:
       - name: storage
         persistentVolumeClaim:
           claimName: hawkbit-storage
-  triggers:
-    - type: ConfigChange
-    - type: ImageChange
-      imageChangeParams:
-        automatic: true
-        containerNames:
-          - hawkbit
-        from:
-          kind: ImageStreamTag
-          name: hawkbit:latest
