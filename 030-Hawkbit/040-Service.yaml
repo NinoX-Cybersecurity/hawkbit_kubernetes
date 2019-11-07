@@ -9,6 +9,7 @@ spec:
     - port: 80
       targetPort: http
       name: http
+      protocol: TCP
   selector:
     app: hawkbit
     name: hawkbit
